@@ -128,13 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 렌더링 ---
     function render() {
         if (state.isAdmin) {
-            document.title = "AI 선생님 [관리자]"; // <-- 관리자 모드일 때 탭 제목 변경
+            document.title = "AI 선생님 [관리자]";
             headerTitle.textContent = "AI 선생님 (관리자 모드)";
             adminView.classList.remove('hidden');
             studentView.classList.add('hidden');
             renderAdminUI();
         } else {
-            document.title = "AI 선생님"; // <-- 학생 모드일 때 탭 제목으로 설정
+            document.title = "AI 선생님";
             headerTitle.textContent = "AI 선생님";
             studentView.classList.remove('hidden');
             adminView.classList.add('hidden');
@@ -260,27 +260,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- 학생/챗봇 기능 ---
-    function startConversation() {
+    async function startConversation() {
         chatBox.innerHTML = '';
         state.conversationHistory = [];
         const topic = state.topics.find(t => t.id === state.activeTopicId);
         if (!topic) return;
 
-        const initialMessage = `안녕하세요! '${topic.title}'에 대해 함께 알아봐요. 무엇이든 궁금한 점을 질문해주세요.`;
-        displayMessage(initialMessage, 'ai');
-        state.conversationHistory.push({ role: 'model', parts: [{ text: initialMessage }] });
+        toggleLoadingIndicator(true);
+
+        const initialPromptForAI = `'${topic.title}' 학습을 시작하겠습니다. 학생의 사전 지식을 확인하고 흥미를 유발할 수 있는, 주제의 가장 핵심적인 기초 개념에 대한 첫 질문을 던져주세요.`;
+        
+        state.conversationHistory.push({ role: 'user', parts: [{ text: initialPromptForAI }] });
+
+        try {
+            const firstQuestion = await getAIResponse(); 
+            displayMessage(firstQuestion, 'ai');
+            state.conversationHistory.push({ role: 'model', parts: [{ text: firstQuestion }] });
+        } catch (error) {
+            console.error("Error getting initial question:", error);
+            displayMessage('대화를 시작하는 중 오류가 발생했습니다. 주제를 다시 선택해주세요.', 'system');
+        } finally {
+            toggleLoadingIndicator(false);
+        }
     }
 
     async function sendMessage() {
         const userMessage = userInput.value.trim();
         if (!userMessage || !state.activeTopicId) return;
         
-        // API 키 클라이언트 측 확인 제거
-        // if (!API_KEY) {
-        //     displayMessage('API 키가 설정되지 않았습니다. 관리자에게 문의하세요.', 'system');
-        //     return;
-        // }
-
         displayMessage(userMessage, 'user');
         userInput.value = '';
         toggleLoadingIndicator(true);
@@ -308,16 +315,17 @@ document.addEventListener('DOMContentLoaded', () => {
             # 학습 주제: ${topic.title}
             # 학습 목표: ${topic.objective}
             # 핵심 규칙:
-            1. 모든 답변은 반드시 아래 "소스 자료"에 근거해야 합니다. 없는 내용은 답변하지 마세요.
+            1. 모든 답변은 최우선적으로 아래 "소스 자료"에 근거해야 합니다. 하지만 학습 목표 달성을 위해 꼭 필요한 기초 개념이나 배경 지식에 대한 질문이라면, 소스 자료에 없더라도 간결하게 설명해줄 수 있습니다. 단, 설명 후에는 반드시 소스 자료의 내용으로 다시 돌아와야 합니다.
             2. 관련 없는 질문에는 "우리는 지금 '${topic.title}'에 대해 배우고 있어요." 라고 말하며 주제로 돌아오세요.
-            # 5. 항상 한국어로, 친절한 선생님 말투를 사용하세요.
+            3. 쉬운 비유와 예시로 단계적으로 설명해야 합니다(스캐폴딩).
+            4. 대화의 끝을 질문으로 마무리하여 학생의 참여를 유도하세요.
+            5. 항상 한국어로, 친절한 선생님 말투를 사용하세요.
             # 소스 자료
             ---
             ${topic.source}
             ---
         `;
         
-        // API 호출 주소를 Netlify Function 주소로 변경합니다.
         const apiUrl = `/.netlify/functions/getAIResponse`;
 
         const payload = {
@@ -388,5 +396,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
-
 
