@@ -365,8 +365,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
         const p = document.createElement('p');
-        p.textContent = text;
-        p.classList.add('px-4', 'py-2', 'rounded-2xl', 'text-base', 'leading-relaxed', 'shadow-sm');
+        
+        // **텍스트**를 <strong> 태그로 변환하여 굵게 표시하고,
+        // whitespace-pre-wrap 클래스를 추가하여 줄바꿈을 적용합니다.
+        p.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        p.classList.add('px-4', 'py-2', 'rounded-2xl', 'text-base', 'leading-relaxed', 'shadow-sm', 'whitespace-pre-wrap');
+
         if (sender === 'user') {
             messageDiv.classList.add('justify-end', 'ml-auto');
             p.classList.add('bg-blue-500', 'text-white', 'rounded-br-none');
