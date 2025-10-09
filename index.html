@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 선생님</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+        #chat-box::-webkit-scrollbar, #admin-topic-list::-webkit-scrollbar { width: 8px; }
+        #chat-box::-webkit-scrollbar-track, #admin-topic-list::-webkit-scrollbar-track { background: #f1f1f1; }
+        #chat-box::-webkit-scrollbar-thumb, #admin-topic-list::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        #chat-box::-webkit-scrollbar-thumb:hover, #admin-topic-list::-webkit-scrollbar-thumb:hover { background: #555; }
+        .dot-flashing { position: relative; width: 10px; height: 10px; border-radius: 5px; background-color: #9880ff; color: #9880ff; animation: dot-flashing 1s infinite linear alternate; animation-delay: 0.5s; }
+        .dot-flashing::before, .dot-flashing::after { content: ""; display: inline-block; position: absolute; top: 0; }
+        .dot-flashing::before { left: -15px; width: 10px; height: 10px; border-radius: 5px; background-color: #9880ff; color: #9880ff; animation: dot-flashing 1s infinite alternate; animation-delay: 0s; }
+        .dot-flashing::after { left: 15px; width: 10px; height: 10px; border-radius: 5px; background-color: #9880ff; color: #9880ff; animation: dot-flashing 1s infinite alternate; animation-delay: 1s; }
+        @keyframes dot-flashing { 0% { background-color: #9880ff; } 50%, 100% { background-color: #beb6ff; } }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4" style="font-family: 'Noto Sans KR', sans-serif;">
+
+    <div class="w-full max-w-4xl bg-white rounded-2xl shadow-xl flex flex-col h-[90vh]">
+        <!-- 헤더 -->
+        <header class="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h1 id="header-title" class="text-xl font-bold text-gray-800">AI 선생님</h1>
+        </header>
+
+        <!-- 학생 모드 뷰 -->
+        <main id="student-view" class="hidden flex-1 flex flex-col p-4 overflow-hidden">
+            <div id="topic-selection-view" class="p-4 border-b mb-4">
+                <h2 class="text-lg font-semibold mb-3 text-center">학습할 주제를 선택해주세요.</h2>
+                <div id="topic-tabs" class="flex flex-wrap justify-center gap-3">
+                    <!-- 주제 탭이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+            <div id="chat-view" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="chat-box" class="flex-1 overflow-y-auto pr-2 space-y-4"></div>
+                <div id="input-container" class="mt-4 flex items-center">
+                    <input type="text" id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="메시지를 입력하세요...">
+                    <button id="send-button" class="ml-3 px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">전송</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- 관리자 모드 뷰 -->
+        <main id="admin-view" class="hidden flex-1 flex md:flex-row flex-col overflow-hidden">
+            <div class="w-full md:w-1/3 border-r flex flex-col">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h2 class="text-lg font-bold">주제 관리</h2>
+                    <button id="new-topic-btn" class="px-3 py-1 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600">+</button>
+                </div>
+                <div id="admin-topic-list" class="flex-1 overflow-y-auto">
+                    <!-- 주제 목록이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+            <div id="admin-editor" class="w-full md:w-2/3 p-6 space-y-6 hidden">
+                <div>
+                    <label for="topic-title" class="block text-lg font-semibold text-gray-700 mb-2">주제 제목</label>
+                    <input type="text" id="topic-title" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="예: 물의 순환">
+                </div>
+                <div>
+                    <label for="learning-objective" class="block text-lg font-semibold text-gray-700 mb-2">학습 목표</label>
+                    <textarea id="learning-objective" rows="2" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="예: 학생은 물의 순환 과정을 설명할 수 있다."></textarea>
+                </div>
+                <div>
+                    <label for="source-material" class="block text-lg font-semibold text-gray-700 mb-2">소스 자료</label>
+                    <textarea id="source-material" rows="10" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="AI 튜터가 참고할 교과서 내용을 여기에 붙여넣으세요."></textarea>
+                </div>
+                <div class="flex justify-between items-center">
+                    <button id="delete-topic-btn" class="px-6 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">삭제</button>
+                    <button id="save-settings-btn" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600">저장</button>
+                </div>
+            </div>
+             <div id="admin-editor-placeholder" class="w-full md:w-2/3 p-6 flex items-center justify-center text-gray-500">
+                왼쪽에서 주제를 선택하거나 새 주제를 추가하세요.
+            </div>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- 상태 관리 ---
+    let state = {
+        isAdmin: false,
+        topics: [],
+        activeTopicId: null,
+        activeAdminTopicId: null,
+        conversationHistory: []
+    };
+
+    // --- 중요: 이 API 키는 이제 사용되지 않습니다. 서버(Netlify Function)에서 관리됩니다. ---
+    const API_KEY = ""; 
+
+    // --- DOM 요소 ---
+    const headerTitle = document.getElementById('header-title');
+    const studentView = document.getElementById('student-view');
+    const adminView = document.getElementById('admin-view');
+    const topicSelectionView = document.getElementById('topic-selection-view');
+    const chatView = document.getElementById('chat-view');
+    const chatBox = document.getElementById('chat-box');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    // Admin elements
+    const adminTopicList = document.getElementById('admin-topic-list');
+    const newTopicBtn = document.getElementById('new-topic-btn');
+    const adminEditor = document.getElementById('admin-editor');
+    const adminEditorPlaceholder = document.getElementById('admin-editor-placeholder');
+    const topicTitleInput = document.getElementById('topic-title');
+    const learningObjectiveInput = document.getElementById('learning-objective');
+    const sourceMaterialInput = document.getElementById('source-material');
+    const saveSettingsBtn = document.getElementById('save-settings-btn');
+    const deleteTopicBtn = document.getElementById('delete-topic-btn');
+
+    // --- 초기화 ---
+    function init() {
+        const urlParams = new URLSearchParams(window.location.search);
+        state.isAdmin = urlParams.get('admin') === 'true';
+        loadTopics();
+        render();
+        setupEventListeners();
+    }
+
+    // --- 렌더링 ---
+    function render() {
+        if (state.isAdmin) {
+            headerTitle.textContent = "AI 선생님 (관리자 모드)";
+            adminView.classList.remove('hidden');
+            studentView.classList.add('hidden');
+            renderAdminUI();
+        } else {
+            headerTitle.textContent = "AI 선생님";
+            studentView.classList.remove('hidden');
+            adminView.classList.add('hidden');
+            renderStudentUI();
+        }
+    }
+
+    function renderAdminUI() {
+        adminTopicList.innerHTML = '';
+        if(state.topics.length === 0) {
+            adminTopicList.innerHTML = `<p class="p-4 text-gray-500 text-sm">주제가 없습니다. '+' 버튼을 눌러 새 주제를 추가하세요.</p>`;
+        } else {
+            state.topics.forEach(topic => {
+                const topicEl = document.createElement('div');
+                topicEl.classList.add('p-4', 'border-b', 'cursor-pointer', 'hover:bg-gray-100');
+                if (topic.id === state.activeAdminTopicId) {
+                    topicEl.classList.add('bg-blue-100');
+                }
+                topicEl.textContent = topic.title || '새 주제';
+                topicEl.dataset.topicId = topic.id;
+                topicEl.addEventListener('click', () => selectAdminTopic(topic.id));
+                adminTopicList.appendChild(topicEl);
+            });
+        }
+        renderAdminEditor();
+    }
+    
+    function renderAdminEditor() {
+        const topic = state.topics.find(t => t.id === state.activeAdminTopicId);
+        if (topic) {
+            adminEditor.classList.remove('hidden');
+            adminEditorPlaceholder.classList.add('hidden');
+            topicTitleInput.value = topic.title;
+            learningObjectiveInput.value = topic.objective;
+            sourceMaterialInput.value = topic.source;
+        } else {
+            adminEditor.classList.add('hidden');
+            adminEditorPlaceholder.classList.remove('hidden');
+        }
+    }
+
+    function renderStudentUI() {
+        const topicTabs = document.getElementById('topic-tabs');
+        topicTabs.innerHTML = '';
+        if (state.topics.length > 0) {
+            state.topics.forEach(topic => {
+                const tab = document.createElement('button');
+                tab.classList.add('px-4', 'py-2', 'font-semibold', 'rounded-lg', 'transition');
+                if (topic.id === state.activeTopicId) {
+                    tab.classList.add('bg-blue-500', 'text-white', 'shadow-md');
+                } else {
+                    tab.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                }
+                tab.textContent = topic.title;
+                tab.dataset.topicId = topic.id;
+                tab.addEventListener('click', () => selectStudentTopic(topic.id));
+                topicTabs.appendChild(tab);
+            });
+        } else {
+            topicSelectionView.innerHTML = `<p class="text-center text-gray-500">현재 학습 가능한 주제가 없습니다. 관리자에게 문의하세요.</p>`;
+        }
+    }
+
+    // --- 이벤트 핸들러 ---
+    function setupEventListeners() {
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', e => e.key === 'Enter' && sendMessage());
+        newTopicBtn.addEventListener('click', createNewTopic);
+        saveSettingsBtn.addEventListener('click', saveTopic);
+        deleteTopicBtn.addEventListener('click', deleteTopic);
+    }
+
+    function selectAdminTopic(topicId) {
+        state.activeAdminTopicId = topicId;
+        renderAdminUI();
+    }
+
+    function selectStudentTopic(topicId) {
+        state.activeTopicId = topicId;
+        chatView.classList.remove('hidden');
+        startConversation();
+        renderStudentUI();
+    }
+
+    // --- 관리자 기능 ---
+    function createNewTopic() {
+        const newTopic = {
+            id: `topic-${Date.now()}`,
+            title: '새 주제',
+            objective: '',
+            source: ''
+        };
+        state.topics.unshift(newTopic);
+        state.activeAdminTopicId = newTopic.id;
+        saveTopics();
+        renderAdminUI();
+    }
+
+    function saveTopic() {
+        if (!state.activeAdminTopicId) return;
+        const topicIndex = state.topics.findIndex(t => t.id === state.activeAdminTopicId);
+        if (topicIndex > -1) {
+            state.topics[topicIndex] = {
+                ...state.topics[topicIndex],
+                title: topicTitleInput.value,
+                objective: learningObjectiveInput.value,
+                source: sourceMaterialInput.value
+            };
+            saveTopics();
+            alert('저장되었습니다.');
+            renderAdminUI(); // 목록 이름 업데이트를 위해
+        }
+    }
+
+    function deleteTopic() {
+        if (!state.activeAdminTopicId) return;
+        if (confirm('정말로 이 주제를 삭제하시겠습니까?')) {
+            state.topics = state.topics.filter(t => t.id !== state.activeAdminTopicId);
+            state.activeAdminTopicId = null;
+            saveTopics();
+            renderAdminUI();
+        }
+    }
+    
+    // --- 학생/챗봇 기능 ---
+    function startConversation() {
+        chatBox.innerHTML = '';
+        state.conversationHistory = [];
+        const topic = state.topics.find(t => t.id === state.activeTopicId);
+        if (!topic) return;
+
+        const initialMessage = `안녕하세요! '${topic.title}'에 대해 함께 알아봐요. 무엇이든 궁금한 점을 질문해주세요.`;
+        displayMessage(initialMessage, 'ai');
+        state.conversationHistory.push({ role: 'model', parts: [{ text: initialMessage }] });
+    }
+
+    async function sendMessage() {
+        const userMessage = userInput.value.trim();
+        if (!userMessage || !state.activeTopicId) return;
+        
+        // API 키 클라이언트 측 확인 제거
+        // if (!API_KEY) {
+        //     displayMessage('API 키가 설정되지 않았습니다. 관리자에게 문의하세요.', 'system');
+        //     return;
+        // }
+
+        displayMessage(userMessage, 'user');
+        userInput.value = '';
+        toggleLoadingIndicator(true);
+
+        state.conversationHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+
+        try {
+            const aiResponse = await getAIResponse();
+            displayMessage(aiResponse, 'ai');
+            state.conversationHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
+        } catch (error) {
+            console.error("Error getting AI response:", error);
+            displayMessage('AI 응답을 가져오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'system');
+        } finally {
+            toggleLoadingIndicator(false);
+        }
+    }
+
+    async function getAIResponse() {
+        const topic = state.topics.find(t => t.id === state.activeTopicId);
+        if (!topic) return "오류: 현재 선택된 학습 주제를 찾을 수 없습니다.";
+        
+        const systemPrompt = `
+            당신은 학생들을 가르치는 유능하고 친절한 AI 튜터입니다.
+            # 학습 주제: ${topic.title}
+            # 학습 목표: ${topic.objective}
+            # 핵심 규칙:
+            1. 모든 답변은 반드시 아래 "소스 자료"에 근거해야 합니다. 없는 내용은 답변하지 마세요.
+            2. 관련 없는 질문에는 "우리는 지금 '${topic.title}'에 대해 배우고 있어요." 라고 말하며 주제로 돌아오세요.
+            # 5. 항상 한국어로, 친절한 선생님 말투를 사용하세요.
+            # 소스 자료
+            ---
+            ${topic.source}
+            ---
+        `;
+        
+        // API 호출 주소를 Netlify Function 주소로 변경합니다.
+        const apiUrl = `/.netlify/functions/getAIResponse`;
+
+        const payload = {
+            contents: state.conversationHistory,
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+        };
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) throw new Error(`API call failed with status ${response.status}`);
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 생성하는 데 문제가 발생했습니다.";
+    }
+
+    // --- 유틸리티 함수 ---
+    function displayMessage(text, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
+        const p = document.createElement('p');
+        p.textContent = text;
+        p.classList.add('px-4', 'py-2', 'rounded-2xl', 'text-base', 'leading-relaxed', 'shadow-sm');
+        if (sender === 'user') {
+            messageDiv.classList.add('justify-end', 'ml-auto');
+            p.classList.add('bg-blue-500', 'text-white', 'rounded-br-none');
+        } else if (sender === 'ai') {
+            messageDiv.classList.add('justify-start', 'mr-auto');
+            p.classList.add('bg-gray-200', 'text-gray-800', 'rounded-bl-none');
+        } else {
+            messageDiv.classList.add('justify-center', 'mx-auto', 'w-full');
+            p.classList.add('bg-yellow-100', 'text-yellow-800', 'text-center', 'text-sm');
+        }
+        messageDiv.appendChild(p);
+        chatBox.appendChild(messageDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function toggleLoadingIndicator(show) {
+        let loadingDiv = document.getElementById('loading-indicator');
+        if (show) {
+            if (!loadingDiv) {
+                loadingDiv = document.createElement('div');
+                loadingDiv.id = 'loading-indicator';
+                loadingDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
+                loadingDiv.innerHTML = `<div class="flex items-center space-x-2 bg-gray-200 text-gray-800 rounded-2xl rounded-bl-none px-4 py-3"><div class="dot-flashing"></div></div>`;
+                chatBox.appendChild(loadingDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        } else {
+            if (loadingDiv) loadingDiv.remove();
+        }
+    }
+
+    function saveTopics() {
+        localStorage.setItem('aiTutorTopics', JSON.stringify(state.topics));
+    }
+
+    function loadTopics() {
+        const topicsJSON = localStorage.getItem('aiTutorTopics');
+        state.topics = topicsJSON ? JSON.parse(topicsJSON) : [];
+    }
+    
+    // --- 앱 시작 ---
+    init();
+});
+</script>
+</body>
+</html>
+
+
