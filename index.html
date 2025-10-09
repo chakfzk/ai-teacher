@@ -128,11 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 렌더링 ---
     function render() {
         if (state.isAdmin) {
+            document.title = "AI 선생님 [관리자]"; // <-- 관리자 모드일 때 탭 제목 변경
             headerTitle.textContent = "AI 선생님 (관리자 모드)";
             adminView.classList.remove('hidden');
             studentView.classList.add('hidden');
             renderAdminUI();
         } else {
+            document.title = "AI 선생님"; // <-- 학생 모드일 때 탭 제목으로 설정
             headerTitle.textContent = "AI 선생님";
             studentView.classList.remove('hidden');
             adminView.classList.add('hidden');
