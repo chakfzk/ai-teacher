@@ -81,8 +81,24 @@
         </main>
     </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
+<script type="module">
+    // Firebase SDK 로드
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, serverTimestamp, orderBy, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- Firebase 설정 ---
+    // 중요: 아래 firebaseConfig 객체를 자신의 Firebase 프로젝트 설정으로 교체하세요.
+    // 가이드 문서를 따라 Firebase 콘솔에서 복사한 코드를 여기에 붙여넣으세요.
+    const firebaseConfig = {
+  apiKey: "AIzaSyBZHz1HzwrMfG-HU9L9wCx50PxTHORiqz8",
+  authDomain: "ai-teacher-4a95b.firebaseapp.com",
+  projectId: "ai-teacher-4a95b",
+  storageBucket: "ai-teacher-4a95b.firebasestorage.app",
+  messagingSenderId: "734669007499",
+  appId: "1:734669007499:web:422188c025dd31ad18428e",
+  measurementId: "G-3447V57H7M"
+};
 
     // --- 상태 관리 ---
     let state = {
@@ -92,37 +108,96 @@ document.addEventListener('DOMContentLoaded', () => {
         activeAdminTopicId: null,
         conversationHistory: []
     };
-
-    // --- 중요: 이 API 키는 이제 사용되지 않습니다. 서버(Netlify Function)에서 관리됩니다. ---
-    const API_KEY = ""; 
+    
+    // --- Firebase 인스턴스 ---
+    let db;
+    let auth;
+    let topicsCollectionRef;
 
     // --- DOM 요소 ---
-    const headerTitle = document.getElementById('header-title');
-    const studentView = document.getElementById('student-view');
-    const adminView = document.getElementById('admin-view');
-    const topicSelectionView = document.getElementById('topic-selection-view');
-    const chatView = document.getElementById('chat-view');
-    const chatBox = document.getElementById('chat-box');
-    const userInput = document.getElementById('user-input');
-    const sendButton = document.getElementById('send-button');
-    // Admin elements
-    const adminTopicList = document.getElementById('admin-topic-list');
-    const newTopicBtn = document.getElementById('new-topic-btn');
-    const adminEditor = document.getElementById('admin-editor');
-    const adminEditorPlaceholder = document.getElementById('admin-editor-placeholder');
-    const topicTitleInput = document.getElementById('topic-title');
-    const learningObjectiveInput = document.getElementById('learning-objective');
-    const sourceMaterialInput = document.getElementById('source-material');
-    const saveSettingsBtn = document.getElementById('save-settings-btn');
-    const deleteTopicBtn = document.getElementById('delete-topic-btn');
+    let headerTitle, studentView, adminView, topicSelectionView, chatView, chatBox, userInput, sendButton, 
+        adminTopicList, newTopicBtn, adminEditor, adminEditorPlaceholder, topicTitleInput, 
+        learningObjectiveInput, sourceMaterialInput, saveSettingsBtn, deleteTopicBtn;
 
     // --- 초기화 ---
-    function init() {
+    async function init() {
+        // DOM 요소 할당
+        headerTitle = document.getElementById('header-title');
+        studentView = document.getElementById('student-view');
+        adminView = document.getElementById('admin-view');
+        topicSelectionView = document.getElementById('topic-selection-view');
+        chatView = document.getElementById('chat-view');
+        chatBox = document.getElementById('chat-box');
+        userInput = document.getElementById('user-input');
+        sendButton = document.getElementById('send-button');
+        adminTopicList = document.getElementById('admin-topic-list');
+        newTopicBtn = document.getElementById('new-topic-btn');
+        adminEditor = document.getElementById('admin-editor');
+        adminEditorPlaceholder = document.getElementById('admin-editor-placeholder');
+        topicTitleInput = document.getElementById('topic-title');
+        learningObjectiveInput = document.getElementById('learning-objective');
+        sourceMaterialInput = document.getElementById('source-material');
+        saveSettingsBtn = document.getElementById('save-settings-btn');
+        deleteTopicBtn = document.getElementById('delete-topic-btn');
+        
+        // Firebase 초기화 및 인증
+        try {
+            if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
+                console.error("Firebase config not found or not configured.");
+                const mainContent = document.querySelector('.w-full.max-w-4xl');
+                if(mainContent) {
+                    mainContent.innerHTML = `<div class="p-8 text-center bg-red-50 border border-red-200 rounded-lg m-4">
+                        <h2 class="text-2xl font-bold text-red-700">Firebase 설정이 필요합니다</h2>
+                        <p class="mt-4 text-red-600">'AI 선생님'이 정상적으로 작동하려면 Firebase 데이터베이스 설정이 필요합니다.</p>
+                        <p class="mt-2 text-gray-700">'index.html' 파일을 열어 109번째 줄 근처의 'firebaseConfig' 부분을 자신의 Firebase 프로젝트 정보로 교체해주세요.</p>
+                        <p class="mt-4">
+                            <a href="https://console.firebase.google.com/" target="_blank" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 no-underline">Firebase 콘솔로 이동하기</a>
+                        </p>
+                        <p class="mt-2 text-sm text-gray-500">자세한 방법은 함께 제공된 'firebase-setup-guide.md' 가이드 문서를 참고하세요.</p>
+                    </div>`;
+                }
+                return;
+            }
+
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            await signInAnonymously(auth);
+            
+            console.log("Firebase initialized and user authenticated.");
+
+            // Firestore 컬렉션 참조 설정
+            // projectId를 사용하여 고유한 경로 생성
+            const collectionPath = `ai-teacher/${firebaseConfig.projectId}/topics`;
+            topicsCollectionRef = collection(db, collectionPath);
+            setupFirestoreListener();
+
+        } catch (error) {
+            console.error("Firebase 초기화 오류:", error);
+            if (chatBox) displayMessage("데이터베이스 연결에 실패했습니다. 새로고침 해주세요.", "system");
+            return;
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         state.isAdmin = urlParams.get('admin') === 'true';
-        loadTopics();
         render();
         setupEventListeners();
+    }
+
+    // --- Firestore 리스너 설정 ---
+    function setupFirestoreListener() {
+        const q = query(topicsCollectionRef, orderBy('createdAt', 'desc'));
+        onSnapshot(q, (snapshot) => {
+            state.topics = [];
+            snapshot.forEach((doc) => {
+                state.topics.push({ id: doc.id, ...doc.data() });
+            });
+            console.log("Topics loaded from Firestore:", state.topics.length);
+            render(); // 데이터 변경 시 UI 다시 렌더링
+        }, (error) => {
+            console.error("Error listening to topic changes:", error);
+            if (chatBox) displayMessage("주제 목록을 실시간으로 업데이트하는 데 실패했습니다.", "system");
+        });
     }
 
     // --- 렌더링 ---
@@ -178,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderStudentUI() {
         const topicTabs = document.getElementById('topic-tabs');
+        if (!topicTabs) return;
         topicTabs.innerHTML = '';
         if (state.topics.length > 0) {
             state.topics.forEach(topic => {
@@ -194,7 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 topicTabs.appendChild(tab);
             });
         } else {
-            topicSelectionView.innerHTML = `<p class="text-center text-gray-500">현재 학습 가능한 주제가 없습니다. 관리자에게 문의하세요.</p>`;
+            if (topicSelectionView) {
+                topicSelectionView.innerHTML = `<p class="text-center text-gray-500">현재 학습 가능한 주제가 없습니다. 관리자에게 문의하세요.</p>`;
+            }
         }
     }
 
@@ -219,43 +297,49 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStudentUI();
     }
 
-    // --- 관리자 기능 ---
-    function createNewTopic() {
-        const newTopic = {
-            id: `topic-${Date.now()}`,
-            title: '새 주제',
-            objective: '',
-            source: ''
-        };
-        state.topics.unshift(newTopic);
-        state.activeAdminTopicId = newTopic.id;
-        saveTopics();
-        renderAdminUI();
-    }
-
-    function saveTopic() {
-        if (!state.activeAdminTopicId) return;
-        const topicIndex = state.topics.findIndex(t => t.id === state.activeAdminTopicId);
-        if (topicIndex > -1) {
-            state.topics[topicIndex] = {
-                ...state.topics[topicIndex],
-                title: topicTitleInput.value,
-                objective: learningObjectiveInput.value,
-                source: sourceMaterialInput.value
+    // --- 관리자 기능 (Firestore 연동) ---
+    async function createNewTopic() {
+        try {
+            const newTopic = {
+                title: '새 주제',
+                objective: '',
+                source: '',
+                createdAt: serverTimestamp()
             };
-            saveTopics();
-            alert('저장되었습니다.');
-            renderAdminUI(); // 목록 이름 업데이트를 위해
+            const docRef = await addDoc(topicsCollectionRef, newTopic);
+            state.activeAdminTopicId = docRef.id;
+        } catch (error) {
+            console.error("Error creating new topic: ", error);
+            alert("주제 생성에 실패했습니다.");
         }
     }
 
-    function deleteTopic() {
+    async function saveTopic() {
+        if (!state.activeAdminTopicId) return;
+        try {
+            const topicRef = doc(db, topicsCollectionRef.path, state.activeAdminTopicId);
+            await setDoc(topicRef, {
+                title: topicTitleInput.value,
+                objective: learningObjectiveInput.value,
+                source: sourceMaterialInput.value
+            }, { merge: true });
+            alert('저장되었습니다.');
+        } catch (error) {
+            console.error("Error saving topic: ", error);
+            alert("저장에 실패했습니다.");
+        }
+    }
+
+    async function deleteTopic() {
         if (!state.activeAdminTopicId) return;
         if (confirm('정말로 이 주제를 삭제하시겠습니까?')) {
-            state.topics = state.topics.filter(t => t.id !== state.activeAdminTopicId);
-            state.activeAdminTopicId = null;
-            saveTopics();
-            renderAdminUI();
+            try {
+                await deleteDoc(doc(db, topicsCollectionRef.path, state.activeAdminTopicId));
+                state.activeAdminTopicId = null;
+            } catch (error) {
+                console.error("Error deleting topic: ", error);
+                alert("삭제에 실패했습니다.");
+            }
         }
     }
     
@@ -264,11 +348,14 @@ document.addEventListener('DOMContentLoaded', () => {
         chatBox.innerHTML = '';
         state.conversationHistory = [];
         const topic = state.topics.find(t => t.id === state.activeTopicId);
-        if (!topic) return;
+        if (!topic || !topic.objective) {
+            displayMessage('이 주제에 대한 학습 목표가 설정되지 않았습니다. 관리자에게 문의하세요.', 'system');
+            return;
+        }
 
         toggleLoadingIndicator(true);
 
-        const initialPromptForAI = `'${topic.title}' 학습을 시작하겠습니다. 학생의 흥미를 유발하고 가장 기본적인 개념을 확인할 수 있는 간단한 OX 퀴즈를 하나 내주세요.`;
+        const initialPromptForAI = `'${topic.title}' 학습을 시작하겠습니다. 먼저 학생에게 오늘의 학습 목표인 '${topic.objective}'을(를) 친절하게 알려준 뒤, 이어서 바로 가장 기본적인 개념을 확인할 수 있는 간단한 OX 퀴즈를 하나 내주세요.`;
         
         state.conversationHistory.push({ role: 'user', parts: [{ text: initialPromptForAI }] });
 
@@ -323,9 +410,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             # 스캐폴딩 질문 전략:
             학생의 이해도를 바탕으로 아래 질문 유형을 유연하게 사용하세요. 처음부터 어려운 서술형 질문을 하지 마세요.
-            1. **OX 퀴즈**: 가장 기본적인 사실 관계를 확인하는 질문입니다. (예: "물은 끓으면 수증기가 된다. (O/X)")
-            2. **선택형 문제**: 몇 가지 선택지를 주고 정답을 고르게 하는 질문입니다. (예: "물이 수증기로 변하는 현상을 무엇이라고 할까요? 1) 증발 2) 응결 3) 융해")
-            3. **완성형 문제**: 문장의 빈칸을 채우게 하여 개념의 정의나 원리를 완성시키는 질문입니다. (예: "햇빛을 받아 물이 수증기가 되는 과정을 '____'이라고 해요.")
+            1. **OX 퀴즈**: 가장 기본적인 사실 관계를 확인하는 질문입니다.
+            2. **선택형 문제**: 몇 가지 선택지를 주고 정답을 고르게 하는 질문입니다.
+            3. **완성형 문제**: 문장의 빈칸을 채우게 하여 개념의 정의나 원리를 완성시키는 질문입니다.
             4. **단답형 문제**: 핵심 개념이나 용어에 대해 직접 질문하여 한두 단어로 답하게 하는 질문입니다.
             5. **서술형 문제 및 학습 마무리**:
                - 학생이 이전 단계의 문제들을 여러 번 성공적으로 해결하여 주제에 대한 이해가 충분하다고 판단될 때만 이 단계를 진행하세요.
@@ -353,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'json' },
             body: JSON.stringify(payload),
         });
 
@@ -364,6 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 유틸리티 함수 ---
     function displayMessage(text, sender) {
+        if (!chatBox) return;
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
         const p = document.createElement('p');
@@ -382,11 +470,12 @@ document.addEventListener('DOMContentLoaded', () => {
             p.classList.add('bg-yellow-100', 'text-yellow-800', 'text-center', 'text-sm');
         }
         messageDiv.appendChild(p);
-        chatBox.appendChild(messageDiv);
+        chatBox.appendChild(p);
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
     function toggleLoadingIndicator(show) {
+        if (!chatBox) return;
         let loadingDiv = document.getElementById('loading-indicator');
         if (show) {
             if (!loadingDiv) {
@@ -401,19 +490,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (loadingDiv) loadingDiv.remove();
         }
     }
-
-    function saveTopics() {
-        localStorage.setItem('aiTutorTopics', JSON.stringify(state.topics));
-    }
-
-    function loadTopics() {
-        const topicsJSON = localStorage.getItem('aiTutorTopics');
-        state.topics = topicsJSON ? JSON.parse(topicsJSON) : [];
-    }
     
     // --- 앱 시작 ---
-    init();
-});
+    document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
