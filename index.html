@@ -88,17 +88,15 @@
     import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, serverTimestamp, orderBy, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // --- Firebase 설정 ---
-    // 중요: 아래 firebaseConfig 객체를 자신의 Firebase 프로젝트 설정으로 교체하세요.
-    // 가이드 문서를 따라 Firebase 콘솔에서 복사한 코드를 여기에 붙여넣으세요.
     const firebaseConfig = {
-  apiKey: "AIzaSyBZHz1HzwrMfG-HU9L9wCx50PxTHORiqz8",
-  authDomain: "ai-teacher-4a95b.firebaseapp.com",
-  projectId: "ai-teacher-4a95b",
-  storageBucket: "ai-teacher-4a95b.firebasestorage.app",
-  messagingSenderId: "734669007499",
-  appId: "1:734669007499:web:422188c025dd31ad18428e",
-  measurementId: "G-3447V57H7M"
-};
+      apiKey: "AIzaSyBZHz1HzwrMfG-HU9L9wCx50PxTHORiqz8",
+      authDomain: "ai-teacher-4a95b.firebaseapp.com",
+      projectId: "ai-teacher-4a95b",
+      storageBucket: "ai-teacher-4a95b.appspot.com",
+      messagingSenderId: "734669007499",
+      appId: "1:734669007499:web:422188c025dd31ad18428e",
+      measurementId: "G-3447V57H7M"
+    };
 
     // --- 상태 관리 ---
     let state = {
@@ -140,7 +138,14 @@
         saveSettingsBtn = document.getElementById('save-settings-btn');
         deleteTopicBtn = document.getElementById('delete-topic-btn');
         
-        // Firebase 초기화 및 인증
+        // URL 파라미터로 모드 결정
+        const urlParams = new URLSearchParams(window.location.search);
+        state.isAdmin = urlParams.get('admin') === 'true';
+
+        // 이벤트 리스너 설정
+        setupEventListeners();
+
+        // Firebase 초기화 및 데이터 로딩 시작
         try {
             if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
                 console.error("Firebase config not found or not configured.");
@@ -149,11 +154,10 @@
                     mainContent.innerHTML = `<div class="p-8 text-center bg-red-50 border border-red-200 rounded-lg m-4">
                         <h2 class="text-2xl font-bold text-red-700">Firebase 설정이 필요합니다</h2>
                         <p class="mt-4 text-red-600">'AI 선생님'이 정상적으로 작동하려면 Firebase 데이터베이스 설정이 필요합니다.</p>
-                        <p class="mt-2 text-gray-700">'index.html' 파일을 열어 109번째 줄 근처의 'firebaseConfig' 부분을 자신의 Firebase 프로젝트 정보로 교체해주세요.</p>
+                        <p class="mt-2 text-gray-700">'index.html' 파일을 열어 'firebaseConfig' 부분을 자신의 Firebase 프로젝트 정보로 교체해주세요.</p>
                         <p class="mt-4">
                             <a href="https://console.firebase.google.com/" target="_blank" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 no-underline">Firebase 콘솔로 이동하기</a>
                         </p>
-                        <p class="mt-2 text-sm text-gray-500">자세한 방법은 함께 제공된 'firebase-setup-guide.md' 가이드 문서를 참고하세요.</p>
                     </div>`;
                 }
                 return;
@@ -166,22 +170,28 @@
             
             console.log("Firebase initialized and user authenticated.");
 
-            // Firestore 컬렉션 참조 설정
-            // projectId를 사용하여 고유한 경로 생성
             const collectionPath = `ai-teacher/${firebaseConfig.projectId}/topics`;
             topicsCollectionRef = collection(db, collectionPath);
             setupFirestoreListener();
 
         } catch (error) {
             console.error("Firebase 초기화 오류:", error);
-            if (chatBox) displayMessage("데이터베이스 연결에 실패했습니다. 새로고침 해주세요.", "system");
-            return;
+            if (error.code === 'auth/configuration-not-found') {
+                const mainContent = document.querySelector('.w-full.max-w-4xl');
+                if(mainContent) {
+                    mainContent.innerHTML = `<div class="p-8 text-center bg-yellow-50 border border-yellow-200 rounded-lg m-4">
+                        <h2 class="text-2xl font-bold text-yellow-800">Firebase 인증 설정이 필요합니다</h2>
+                        <p class="mt-4 text-yellow-700">'익명 로그인' 방식이 활성화되지 않았습니다.</p>
+                        <p class="mt-2 text-gray-700">Firebase 콘솔로 이동하여 <strong>Authentication &gt; Sign-in method</strong> 탭에서 <strong>'익명'</strong> 제공업체를 활성화해주세요.</p>
+                        <p class="mt-4">
+                            <a href="https://console.firebase.google.com/" target="_blank" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 no-underline">Firebase 콘솔로 이동하기</a>
+                        </p>
+                    </div>`;
+                }
+            } else {
+                 if (chatBox) displayMessage("데이터베이스 연결에 실패했습니다. Firebase 설정을 확인하고 새로고침 해주세요.", "system");
+            }
         }
-
-        const urlParams = new URLSearchParams(window.location.search);
-        state.isAdmin = urlParams.get('admin') === 'true';
-        render();
-        setupEventListeners();
     }
 
     // --- Firestore 리스너 설정 ---
@@ -193,7 +203,7 @@
                 state.topics.push({ id: doc.id, ...doc.data() });
             });
             console.log("Topics loaded from Firestore:", state.topics.length);
-            render(); // 데이터 변경 시 UI 다시 렌더링
+            render(); 
         }, (error) => {
             console.error("Error listening to topic changes:", error);
             if (chatBox) displayMessage("주제 목록을 실시간으로 업데이트하는 데 실패했습니다.", "system");
@@ -218,6 +228,7 @@
     }
 
     function renderAdminUI() {
+        if (!adminTopicList) return;
         adminTopicList.innerHTML = '';
         if(state.topics.length === 0) {
             adminTopicList.innerHTML = `<p class="p-4 text-gray-500 text-sm">주제가 없습니다. '+' 버튼을 눌러 새 주제를 추가하세요.</p>`;
@@ -238,6 +249,7 @@
     }
     
     function renderAdminEditor() {
+        if (!adminEditor || !adminEditorPlaceholder) return;
         const topic = state.topics.find(t => t.id === state.activeAdminTopicId);
         if (topic) {
             adminEditor.classList.remove('hidden');
@@ -254,7 +266,7 @@
     function renderStudentUI() {
         const topicTabs = document.getElementById('topic-tabs');
         if (!topicTabs) return;
-        topicTabs.innerHTML = '';
+        topicTabs.innerHTML = ''; // Clear previous content first
         if (state.topics.length > 0) {
             state.topics.forEach(topic => {
                 const tab = document.createElement('button');
@@ -270,9 +282,7 @@
                 topicTabs.appendChild(tab);
             });
         } else {
-            if (topicSelectionView) {
-                topicSelectionView.innerHTML = `<p class="text-center text-gray-500">현재 학습 가능한 주제가 없습니다. 관리자에게 문의하세요.</p>`;
-            }
+            topicTabs.innerHTML = `<p class="text-center text-gray-500">현재 학습 가능한 주제가 없습니다. 관리자 모드에서 주제를 추가해주세요.</p>`;
         }
     }
 
@@ -292,7 +302,7 @@
 
     function selectStudentTopic(topicId) {
         state.activeTopicId = topicId;
-        chatView.classList.remove('hidden');
+        if(chatView) chatView.classList.remove('hidden');
         startConversation();
         renderStudentUI();
     }
@@ -345,6 +355,7 @@
     
     // --- 학생/챗봇 기능 ---
     async function startConversation() {
+        if (!chatBox) return;
         chatBox.innerHTML = '';
         state.conversationHistory = [];
         const topic = state.topics.find(t => t.id === state.activeTopicId);
@@ -440,7 +451,7 @@
         };
         const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
 
