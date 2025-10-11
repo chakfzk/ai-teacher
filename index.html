@@ -38,7 +38,7 @@
                 </div>
             </div>
             <div id="chat-view" class="hidden flex-1 flex flex-col overflow-hidden">
-                <div id="chat-box" class="flex-1 overflow-y-auto pr-2 space-y-4"></div>
+                <div id="chat-box" class="flex-1 overflow-y-auto pr-2"></div>
                 <div id="input-container" class="mt-4 flex items-center">
                     <input type="text" id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="메시지를 입력하세요...">
                     <button id="send-button" class="ml-3 px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">전송</button>
@@ -426,9 +426,9 @@
             3. **완성형 문제**: 문장의 빈칸을 채우게 하여 개념의 정의나 원리를 완성시키는 질문입니다.
             4. **단답형 문제**: 핵심 개념이나 용어에 대해 직접 질문하여 한두 단어로 답하게 하는 질문입니다.
             5. **서술형 문제 및 학습 마무리**:
-               - 학생이 이전 단계의 문제들을 여러 번 성공적으로 해결하여 주제에 대한 이해가 충분하다고 판단될 때만 이 단계를 진행하세요.
-               - 서술형 질문은 반드시 한 번에 하나의 개념만 물어보도록 간결하게 구성하세요. 여러 개념을 동시에 묻지 마세요.
-               - 만약, 학생이 완성형/단답형 문제를 막힘없이 여러 번 맞힌다면, 서술형 문제 없이도 "훌륭해요! 이제 '${topic.title}'에 대해 완벽히 이해한 것 같네요." 와 같이 칭찬하며 학습을 성공적으로 마칠 수도 있습니다.
+                - 학생이 이전 단계의 문제들을 여러 번 성공적으로 해결하여 주제에 대한 이해가 충분하다고 판단될 때만 이 단계를 진행하세요.
+                - 서술형 질문은 반드시 한 번에 하나의 개념만 물어보도록 간결하게 구성하세요. 여러 개념을 동시에 묻지 마세요.
+                - 만약, 학생이 완성형/단답형 문제를 막힘없이 여러 번 맞힌다면, 서술형 문제 없이도 "훌륭해요! 이제 '${topic.title}'에 대해 완벽히 이해한 것 같네요." 와 같이 칭찬하며 학습을 성공적으로 마칠 수도 있습니다.
 
             # 핵심 규칙:
             1. 모든 답변과 질문은 최우선적으로 아래 "소스 자료"에 근거해야 합니다. 하지만 학습 목표 달성을 위해 꼭 필요한 기초 개념(예: '밀도'의 정의)에 대한 질문이라면, 자료에 없더라도 간결하게 설명해줄 수 있습니다.
@@ -443,45 +443,68 @@
             ---
         `;
         
-        const apiUrl = `/.netlify/functions/getAIResponse`;
+        const apiKey = ""; // API 키는 실행 환경에서 자동으로 제공됩니다.
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
         const payload = {
             contents: state.conversationHistory,
             systemInstruction: { parts: [{ text: systemPrompt }] }
         };
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
 
-        if (!response.ok) throw new Error(`API call failed with status ${response.status}`);
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 생성하는 데 문제가 발생했습니다.";
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error("API Error Response:", errorBody);
+                throw new Error(`API 호출 실패: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts) {
+                 console.error("Invalid API response structure:", data);
+                 return "AI로부터 유효한 답변을 받지 못했습니다.";
+            }
+
+            return data.candidates[0].content.parts[0].text;
+
+        } catch (error) {
+            console.error("getAIResponse 함수 오류:", error);
+            return "AI 응답을 가져오는 중 오류가 발생했습니다. 네트워크 연결을 확인하거나 잠시 후 다시 시도해주세요.";
+        }
     }
 
     // --- 유틸리티 함수 ---
     function displayMessage(text, sender) {
         if (!chatBox) return;
+        const messageWrapper = document.createElement('div');
+        messageWrapper.classList.add('w-full', 'flex', 'mb-3');
+
         const messageDiv = document.createElement('div');
-        messageDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
-        const p = document.createElement('p');
         
-        p.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        p.classList.add('px-4', 'py-2', 'rounded-2xl', 'text-base', 'leading-relaxed', 'shadow-sm', 'whitespace-pre-wrap');
+        const p = document.createElement('p');
+        p.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+        p.classList.add('px-4', 'py-2', 'rounded-2xl', 'text-base', 'leading-relaxed', 'shadow-sm', 'max-w-xl');
 
         if (sender === 'user') {
-            messageDiv.classList.add('justify-end', 'ml-auto');
+            messageWrapper.classList.add('justify-end');
             p.classList.add('bg-blue-500', 'text-white', 'rounded-br-none');
         } else if (sender === 'ai') {
-            messageDiv.classList.add('justify-start', 'mr-auto');
+            messageWrapper.classList.add('justify-start');
             p.classList.add('bg-gray-200', 'text-gray-800', 'rounded-bl-none');
-        } else {
-            messageDiv.classList.add('justify-center', 'mx-auto', 'w-full');
-            p.classList.add('bg-yellow-100', 'text-yellow-800', 'text-center', 'text-sm');
+        } else { // system messages
+            messageWrapper.classList.add('justify-center');
+            p.classList.add('bg-yellow-100', 'text-yellow-800', 'text-center', 'text-sm', 'w-full', 'max-w-full');
         }
+
         messageDiv.appendChild(p);
-        chatBox.appendChild(p);
+        messageWrapper.appendChild(messageDiv);
+        chatBox.appendChild(messageWrapper);
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
@@ -492,7 +515,7 @@
             if (!loadingDiv) {
                 loadingDiv = document.createElement('div');
                 loadingDiv.id = 'loading-indicator';
-                loadingDiv.classList.add('flex', 'items-end', 'max-w-xl', 'mb-4');
+                loadingDiv.classList.add('flex', 'justify-start', 'w-full', 'mb-3');
                 loadingDiv.innerHTML = `<div class="flex items-center space-x-2 bg-gray-200 text-gray-800 rounded-2xl rounded-bl-none px-4 py-3"><div class="dot-flashing"></div></div>`;
                 chatBox.appendChild(loadingDiv);
                 chatBox.scrollTop = chatBox.scrollHeight;
