@@ -87,9 +87,14 @@
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, serverTimestamp, orderBy, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+    // --- 중요: API 키 설정 ---
+    // Netlify 서버 기능 대신 브라우저에서 직접 Google AI API를 호출합니다.
+    // 아래 따옴표 안에 자신의 Google AI API 키를 입력해주세요.
+    const GEMINI_API_KEY = "AIzaSyAV1DwR-OTXlaK6pja2dEdz8A4tQk7Ayrs";
+
     // --- Firebase 설정 ---
     const firebaseConfig = {
-      apiKey: "AIzaSyBZHz1HzwrMfG-HU9L9wCx50PxTHORiqz8",
+      apiKey: "AIzaSyBZHz1HzwrMfG-HU9L9wCx50PxTHORiqz8", // 참고: 이 키는 Firebase용이며, Gemini API 키와는 다릅니다.
       authDomain: "ai-teacher-4a95b.firebaseapp.com",
       projectId: "ai-teacher-4a95b",
       storageBucket: "ai-teacher-4a95b.appspot.com",
@@ -147,7 +152,7 @@
 
         // Firebase 초기화 및 데이터 로딩 시작
         try {
-            if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
+            if (!firebaseConfig || !firebaseConfig.apiKey.startsWith("AIza")) {
                 console.error("Firebase config not found or not configured.");
                 const mainContent = document.querySelector('.w-full.max-w-4xl');
                 if(mainContent) {
@@ -376,7 +381,7 @@
             state.conversationHistory.push({ role: 'model', parts: [{ text: firstQuestion }] });
         } catch (error) {
             console.error("Error getting initial question:", error);
-            displayMessage('대화를 시작하는 중 오류가 발생했습니다. 주제를 다시 선택해주세요.', 'system');
+            displayMessage(`대화 시작 중 오류가 발생했습니다: ${error.message}`, 'system');
         } finally {
             toggleLoadingIndicator(false);
         }
@@ -398,13 +403,17 @@
             state.conversationHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
         } catch (error) {
             console.error("Error getting AI response:", error);
-            displayMessage('AI 응답을 가져오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'system');
+            displayMessage(`AI 응답을 가져오는 중 오류가 발생했습니다: ${error.message}`, 'system');
         } finally {
             toggleLoadingIndicator(false);
         }
     }
 
     async function getAIResponse() {
+        if (GEMINI_API_KEY === "YOUR_GOOGLE_AI_API_KEY") {
+            throw new Error("Google AI API 키가 설정되지 않았습니다. 스크립트 상단의 'GEMINI_API_KEY' 변수를 확인해주세요.");
+        }
+
         const topic = state.topics.find(t => t.id === state.activeTopicId);
         if (!topic) return "오류: 현재 선택된 학습 주제를 찾을 수 없습니다.";
         
@@ -439,7 +448,8 @@
             ---
         `;
         
-        const apiUrl = `/.netlify/functions/getAIResponse`;
+        const model = "gemini-1.5-flash-preview-0514";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
         const payload = {
             contents: state.conversationHistory,
@@ -454,19 +464,23 @@
             });
 
             if (!response.ok) {
-                const errorBody = await response.json().catch(() => response.text());
+                const errorBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
                 console.error("API Error Response:", errorBody);
-                const errorMessage = errorBody?.error?.message || `API 호출 실패: ${response.status}`;
-                throw new Error(errorMessage);
+                throw new Error(errorBody.error.message || `API 호출 실패: ${response.status}`);
             }
 
             const data = await response.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 생성하는 데 문제가 발생했습니다.";
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) {
+                 // API 호출은 성공했지만 응답이 비어있는 경우
+                 console.error("No text in API response:", data);
+                 throw new Error("AI로부터 비어있는 응답을 받았습니다.");
+            }
+            return text;
 
         } catch (error) {
              console.error("getAIResponse 함수 오류:", error);
-             // 사용자에게 더 구체적인 오류 메시지를 보여줍니다.
-             return `AI 응답을 가져오는 중 오류가 발생했습니다. (오류: ${error.message})`;
+             throw error; // 오류를 다시 던져서 호출한 쪽에서 처리하게 함
         }
     }
 
