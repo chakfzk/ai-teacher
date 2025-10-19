@@ -371,7 +371,7 @@
 
         toggleLoadingIndicator(true);
 
-        const initialPromptForAI = `'${topic.title}' 학습을 시작하겠습니다. 먼저 학생에게 오늘의 학습 목표인 '${topic.objective}'을(를) 친절하게 알려준 뒤, 이어서 바로 가장 기본적인 개념을 확인할 수 있는 간단한 OX 퀴즈를 하나 내주세요.`;
+        const initialPromptForAI = `'${topic.title}' 학습을 시작하겠습니다. 먼저 학생에게 오늘의 학습 목표인 '${topic.objective}'을(를) 친절하게 알려준 뒤, 소스 자료를 5문장으로 간단하게 개조식으로 알려주세요. 이어서 바로 가장 기본적인 개념을 확인할 수 있는 간단한 OX 퀴즈를 하나 내주세요.`;
         
         state.conversationHistory.push({ role: 'user', parts: [{ text: initialPromptForAI }] });
 
@@ -534,5 +534,6 @@
 </script>
 </body>
 </html>
+
 
 
